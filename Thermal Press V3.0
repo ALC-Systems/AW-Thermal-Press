@@ -1,0 +1,168 @@
+/*
+   Heat Press Automation - Arduino Program For Controlling Pneumatic Cylinder
+   Version 3.0
+   November 2018
+   
+ ******** Description & Notes ********
+
+   This program takes an operator input and subsequantly complete one cycle of pressing.
+
+ ***NOTE**: the relay module (8RD-05VDC-SL-C) in this program is at the NC (normally closed) position when the output signal
+   from the microcontroller is "HIGH", and goes to the NO (normally open) position when the output signal is "LOW". Subsequently,
+   the program outputs a "LOW" signal to energize the relay when the operating sequence is initiated.
+
+   The input is set to be the push-start button, which is connected to pin 8 of the Arduino.
+   The output to the relay switch is assigned to pin 7 of the Arduino.
+   LED's 0 through 3 are wired to pin 10 through 13, respectively.
+
+
+ **** LED Array:
+
+   LED 0 - Indicates the system is ready for a new cycle to be initiated; awaits operator input
+   LED 1 - Input received, cylinder activated; bottom position not yet reached
+   LED 2 - Bottom position reached, timer initiated
+   LED 3 - Cycle completed, cylinder returning to initial position
+
+
+ **** To Make Change To the Time Constants *****
+   The timer in version 3.0 is set to hold the cylinder down for 15 seconds. 
+   To alter the time interval where the press is at the bottom of its travel, change the value of the variable "TimeRequired".
+   The TimeRequired Variable is at line 40.
+   
+*/
+int RelayOutput = 7;          // output to the relay
+int PushbuttonInput = 8;      // input from the operator, a push button
+int BoltInput = 9;            // input from the bolt, for when the cylinder reaches the bottom position
+int Switch = 0;
+int LED0 = 10;
+int LED1 = 11;
+int LED2 = 12;
+int LED3 = 13;
+int TimeRequired = 15;         // In SECONDS. This is the reference for the timer in loop (1).
+// Set to the amount of time (in seconds)required for the insert to be held down once the heat unit
+// and the insert have made contact.
+// In Version 2.0 (TimeRequired) is set to be (5) seconds.
+
+void setup() {
+
+  pinMode(RelayOutput, OUTPUT);           // 7, output to relay
+  pinMode(PushbuttonInput, INPUT_PULLUP);        // 8, input from user (push button)
+  pinMode(BoltInput, INPUT_PULLUP);              // 9, input from bolt touching
+  pinMode(LED0, OUTPUT);
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
+  Serial.begin(9600);                     // monitor
+  Serial.println("READY");
+
+}
+
+//begin loop
+
+void loop() {
+
+  // loop 1 start, will hold down the press indefinitely until the bolts touch
+
+  if (digitalRead(PushbuttonInput) == LOW) {                    // loop 1 start button pushed
+    digitalWrite(RelayOutput, LOW);                              // write HIGH to 7
+    digitalWrite (LED1, HIGH);                                   // Turn on LED 1: commence operation
+    digitalWrite (LED0, LOW);                                    // just as an indicator for initiation of loop2
+    Switch = 2;                                                  // so we can move on to the next loop..
+    Serial.println("RELAY ON, LOOP 01; Pressing");
+  }
+  else {
+    digitalWrite(RelayOutput, HIGH);                              // write LOW to 7 (relay output) if button not pushed
+    digitalWrite(LED0, HIGH);                                     //"READY"
+    delay(10);                                                    // do nothing and wait 10 ms for good measure (HA!)
+  }
+
+  // loop 1 end
+  // loop2 start: applying the press for cycle one, hold for [5] seconds. LED (2) on.
+  double timer = 0;
+  while (Switch == 2)  {
+    // timer for loop 2
+
+    if (digitalRead(BoltInput) == LOW) {
+
+      Serial.println("BOLTS TOUCHING, LOOP 02");
+      digitalWrite(RelayOutput, LOW);
+      digitalWrite(LED1, LOW);                                  // LED 1 off
+      digitalWrite(LED2, HIGH);                                 // LED 2: Bottom position reached
+      Serial.println("APPLY PRESS, HOLD DOWN FOR 0.5 SEC, CYCLE ONE, LOOP 02");
+
+      delay(500);                                //hold for a half second
+
+      digitalWrite(RelayOutput, LOW);
+      timer = timer + 0.5;                       // well, it's a timer...what else do you expect?
+
+      Serial.println("Accumulated Time:");       // shows timer
+      Serial.println(timer);                     // shows timer
+
+      if (timer > TimeRequired) {
+        Switch = 3;                              //see if enough loops have been run to accumulate specified amount of seconds
+      }
+
+    } else {
+      digitalWrite(RelayOutput, LOW);
+    }
+  }
+
+  // loop 2 end
+  // Loop 3 start - loop 3 is just for lifting the press for [3] seconds. LED (2, 3) on.
+
+  while (Switch == 3) {
+    digitalWrite(LED2, HIGH);
+    digitalWrite(LED3, HIGH);
+    digitalWrite(RelayOutput, HIGH);                             // lift the press
+    Serial.println("RETRACT PRESS, HOLD UP FOR 3 SEC, CYCLE ONE, LOOP 02");
+    delay(3000);                                                 // enough time for cylinder to go up (?)
+    digitalWrite(RelayOutput, LOW);                              // activate press for loop 4.
+    //Switch = 4;
+    Switch = 0;
+  }
+
+  // loop3 end
+
+  /* This is the end for Version 2.0. Loop 4 was deactivated after it was determined that it is possible to
+      install the inserts in one run instead of having to have the press come back up and then reapply to ensure
+      the insert is installed firmly.
+      To re-activate loop 4, simply delete the "/*" two lines below and the "* /" in the second last line of the code.
+  */
+
+  // loop 4 start - loop 4 reapplies the press and holds for [3] seconds. LED (3) on.
+
+  /* double timer2 = 0;
+    while (Switch == 4) {
+
+      digitalWrite(LED2, LOW);
+      digitalWrite(LED3, HIGH);
+      if (digitalRead(BoltInput) == HIGH) {
+
+
+        Serial.println("BOLTS TOUCHING, LOOP 04");
+        digitalWrite(RelayOutput, LOW);
+
+        delay(500);                                               //hold for a half second
+
+        digitalWrite(RelayOutput, LOW);
+        timer2 = timer2 + 0.5;                                    // well, it's a timer...what else do you expect?
+
+        Serial.println("APPLY PRESS, HOLD DOWN FOR 0.5 SEC, CYCLE TWO, LOOP 04");
+        Serial.println("Accumulated Time ");                      // shows timer
+        Serial.println(timer2);
+
+        if (timer2 > 3) {
+          digitalWrite(RelayOutput, HIGH);
+          digitalWrite(LED3, LOW);
+          Switch = 0;                                             //see if enough loops have been run to accumulate 5 seconds
+        }
+
+      } else {
+        digitalWrite(RelayOutput, LOW);
+      }
+    }
+    // end void loop
+  */
+}
+
+
